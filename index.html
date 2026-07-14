@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>動的利回り曲線 | 日本国債 × 日経平均株価</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e8eaed; --muted:#9aa2af; --accent:#e63946; }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+    font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",-apple-system,BlinkMacSystemFont,sans-serif;
+    background:var(--bg); color:var(--text); padding:20px;
+  }
+  .wrap{max-width:640px;}
+  h1{font-size:22px; margin:0 0 8px;}
+  .sub{color:var(--muted); font-size:14px; margin-bottom:28px; line-height:1.6;}
+  .cards{display:flex; flex-direction:column; gap:14px;}
+  a.card{
+    display:block; background:var(--panel); border:1px solid var(--border); border-radius:10px;
+    padding:20px; text-decoration:none; color:var(--text); transition:border-color .15s;
+  }
+  a.card:hover{border-color:var(--accent);}
+  a.card .title{font-size:16px; font-weight:700; margin-bottom:4px;}
+  a.card .desc{font-size:13px; color:var(--muted);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>動的利回り曲線 <span style="color:var(--muted); font-weight:400;">— 日本国債 × 日経平均株価</span></h1>
+  <div class="sub">日本の国債利回り曲線と日経平均株価の推移を連動表示するツールです(2007年1月〜、毎朝自動更新)。表示したいバージョンを選んでください。</div>
+  <div class="cards">
+    <a class="card" href="simple.html">
+      <div class="title">簡易版</div>
+      <div class="desc">1・2・5・10・20・30年の6年限を表示</div>
+    </a>
+    <a class="card" href="full.html">
+      <div class="title">詳細版(全年限)</div>
+      <div class="desc">1〜10年(各年)・15・20・25・30・40年の15年限を表示</div>
+    </a>
+  </div>
+</div>
+</body>
+</html>
