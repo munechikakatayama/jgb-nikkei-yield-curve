@@ -56,12 +56,12 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>ダイナミック・イールドカーブ <span style="color:var(--muted); font-weight:400;">— 日本国債 × 日経平均株価</span></h1>
+  <h1>ダイナミック・イールドカーブ <span style="color:var(--muted); font-weight:400;">— <span style="color:var(--accent);">日本国債</span> × <span style="color:var(--accent2);">日経平均株価</span></span></h1>
   <div class="sub">1〜10年(各年)・15・20・25・30・40年の全年限で日本の国債利回り曲線と日経平均株価の推移を連動表示します(1985年〜、毎朝自動更新)。長い年限の国債は発行開始前のため、初期のデータでは曲線の一部が欠けます。</div>
 
   <div class="panel readout">
     <div class="date" id="dateLabel">-</div>
-    <div class="metric">日経平均株価 <b id="nikkeiLabel">-</b></div>
+    <div class="metric"><span style="color:var(--accent2);">日経平均株価</span> <b id="nikkeiLabel">-</b></div>
     <div class="metric">10年金利 <b id="y10Label">-</b></div>
     <span class="ycc-tag" id="yccTag">YCC対象期間</span>
   </div>
@@ -69,14 +69,14 @@
   <div class="charts-row">
     <div class="panel">
       <div class="panel-title">
-        <span>利回り曲線(全年限)</span>
+        <span><span style="color:var(--accent);">日本国債</span> 利回り曲線(全年限)</span>
         <label class="checkbox"><input type="checkbox" id="yccCheckbox"> 日銀イールドカーブ・コントロール(YCC)目標を表示</label>
       </div>
       <div class="chart-box"><canvas id="curveChart"></canvas></div>
     </div>
     <div class="panel">
       <div class="panel-title">
-        <span>日経平均株価</span>
+        <span style="color:var(--accent2);">日経平均株価</span>
         <label class="ctrl-group" style="margin:0;">表示開始日:
           <input type="date" id="startDate">
         </label>
@@ -268,7 +268,20 @@ const priceChart = new Chart(ctxPrice, {
     },
     scales:{
       x:{ ticks:{ color:'#c7ccd4', maxTicksLimit:8, autoSkip:true }, grid:{display:false} },
-      y:{ ticks:{color:'#c7ccd4'}, grid:{color:'#262b35'} }
+      y:{
+        type:'logarithmic',
+        ticks:{
+          color:'#c7ccd4',
+          callback:(value)=>{
+            // Only label "nice" round values so the log-scale axis isn't cluttered
+            // with Chart.js's default 2x/5x minor ticks per decade.
+            const s = value.toString();
+            if(/^[1-9]0*$/.test(s)) return value.toLocaleString();
+            return null;
+          }
+        },
+        grid:{color:'#262b35'}
+      }
     },
     onClick:(evt)=>{
       const points = priceChart.getElementsAtEventForMode(evt, 'index', {intersect:false}, true);
