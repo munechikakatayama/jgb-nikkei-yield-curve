@@ -2,12 +2,12 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>動的利回り曲線(全年限) | 日本国債 × 日経平均株価</title>
+<title>ダイナミック・イールドカーブ | 日本国債 × 日経平均株価</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
 <style>
   :root{
     --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e8eaed; --muted:#9aa2af;
-    --accent:#e63946; --accent2:#4ea1ff; --grid:#262b35; --zero:#5b6472;
+    --accent:#e63946; --accent2:#4ea1ff; --grid:#262b35; --zero:#5b6472; --ycc:#f2a541;
   }
   *{box-sizing:border-box;}
   body{
@@ -27,10 +27,16 @@
   .charts-row{display:flex; gap:14px; flex-wrap:wrap;}
   .charts-row .panel{flex:1 1 420px; margin-bottom:0;}
   .chart-box{position:relative; height:320px;}
-  .panel-title{font-size:12px; color:var(--muted); margin:0 0 8px; text-transform:uppercase; letter-spacing:0.04em;}
+  .panel-title{font-size:12px; color:var(--muted); margin:0 0 8px; text-transform:uppercase; letter-spacing:0.04em; display:flex; align-items:center; justify-content:space-between;}
   .controls{display:flex; flex-wrap:wrap; gap:16px; align-items:center;}
   .ctrl-group{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted);}
   input[type=range]{width:180px;}
+  input[type=date]{
+    background:#0f1115; color:var(--text); border:1px solid var(--border); border-radius:6px;
+    padding:4px 8px; font-size:13px; font-family:inherit;
+  }
+  label.checkbox{display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); cursor:pointer; font-weight:400; text-transform:none; letter-spacing:0;}
+  label.checkbox input{accent-color:var(--ycc);}
   button{
     background:var(--accent); color:#fff; border:none; border-radius:6px;
     padding:8px 16px; font-size:13px; cursor:pointer; font-weight:600;
@@ -39,6 +45,10 @@
   button.secondary{background:#333846;}
   .hint{font-size:12px; color:var(--muted); margin-top:10px;}
   .note{font-size:11px; color:var(--muted); margin-top:4px;}
+  .ycc-tag{
+    font-size:11px; color:var(--ycc); border:1px solid var(--ycc); border-radius:4px;
+    padding:1px 6px; margin-left:8px; display:none;
+  }
   @media (max-width: 860px){
     .charts-row{flex-direction:column;}
   }
@@ -46,22 +56,31 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>動的利回り曲線(全年限) <span style="color:var(--muted); font-weight:400;">— 日本国債 × 日経平均株価</span></h1>
-  <div class="sub">1・2・3・4・5・6・7・8・9・10・15・20・25・30・40年の全年限を表示する詳細版です(2007年1月〜)。40年債は2007年11月の発行開始以降のみデータがあります。</div>
+  <h1>ダイナミック・イールドカーブ <span style="color:var(--muted); font-weight:400;">— 日本国債 × 日経平均株価</span></h1>
+  <div class="sub">1〜10年(各年)・15・20・25・30・40年の全年限で日本の国債利回り曲線と日経平均株価の推移を連動表示します(1985年〜、毎朝自動更新)。長い年限の国債は発行開始前のため、初期のデータでは曲線の一部が欠けます。</div>
 
   <div class="panel readout">
     <div class="date" id="dateLabel">-</div>
     <div class="metric">日経平均株価 <b id="nikkeiLabel">-</b></div>
     <div class="metric">10年金利 <b id="y10Label">-</b></div>
+    <span class="ycc-tag" id="yccTag">YCC対象期間</span>
   </div>
 
   <div class="charts-row">
     <div class="panel">
-      <div class="panel-title">利回り曲線(全年限)</div>
+      <div class="panel-title">
+        <span>利回り曲線(全年限)</span>
+        <label class="checkbox"><input type="checkbox" id="yccCheckbox"> 日銀イールドカーブ・コントロール(YCC)目標を表示</label>
+      </div>
       <div class="chart-box"><canvas id="curveChart"></canvas></div>
     </div>
     <div class="panel">
-      <div class="panel-title">日経平均株価</div>
+      <div class="panel-title">
+        <span>日経平均株価</span>
+        <label class="ctrl-group" style="margin:0;">表示開始日:
+          <input type="date" id="startDate">
+        </label>
+      </div>
       <div class="chart-box"><canvas id="priceChart"></canvas></div>
     </div>
   </div>
@@ -81,26 +100,53 @@
         <span id="speedVal">4 日/コマ</span>
       </div>
     </div>
-    <div class="hint">日経平均株価グラフ上でクリックまたはドラッグすると、その日付時点の利回り曲線が表示されます。</div>
+    <div class="hint">日経平均株価グラフ上でクリックまたはドラッグすると、その日付時点の利回り曲線が表示されます。「表示開始日」でグラフの表示範囲を絞り込めます。</div>
     <div class="note">データ更新日: __UPDATED__ / 出所: 財務省(国債金利情報)、Yahoo Finance(日経平均株価)</div>
   </div>
 </div>
 
 <script>
-const RAW = __DATA__; // [dateISO, y1,y2,y3,y4,y5,y6,y7,y8,y9,y10,y15,y20,y25,y30,y40(or null), nikkei]
+const RAW = __DATA__; // [dateISO, y1..y40 (15 vals, null if not yet issued), nikkei]
 const MATURITY_LABELS = ['1年','2年','3年','4年','5年','6年','7年','8年','9年','10年','15年','20年','25年','30年','40年'];
 const NUM_MATURITIES = MATURITY_LABELS.length;
 const N = RAW.length;
-const Y_MIN = -0.6, Y_MAX = 4.3;
+
+// BOJ Yield Curve Control target bands for the 10-year JGB yield, around 0%.
+const YCC_PERIODS = [
+  {start:'2016-09-21', end:'2018-07-30', lower:-0.1, upper:0.1},
+  {start:'2018-07-31', end:'2021-03-18', lower:-0.2, upper:0.2},
+  {start:'2021-03-19', end:'2022-12-19', lower:-0.25, upper:0.25},
+  {start:'2022-12-20', end:'2023-07-27', lower:-0.5, upper:0.5},
+  {start:'2023-07-28', end:'2024-03-19', lower:0, upper:1.0},
+];
+function yccForDate(iso){
+  for(const p of YCC_PERIODS){ if(iso >= p.start && iso <= p.end) return p; }
+  return null;
+}
 
 const dates = RAW.map(r=>r[0]);
 const nikkei = RAW.map(r=>r[NUM_MATURITIES+1]);
 
+// Fixed y-axis range, computed once from the full dataset so the scale never jumps while scrubbing/animating.
+let dataMin = Infinity, dataMax = -Infinity;
+for(const row of RAW){
+  for(let i=1;i<=NUM_MATURITIES;i++){
+    const v = row[i];
+    if(v==null) continue;
+    if(v < dataMin) dataMin = v;
+    if(v > dataMax) dataMax = v;
+  }
+}
+const Y_MIN = Math.floor((dataMin - 0.3) * 2) / 2;
+const Y_MAX = Math.ceil((dataMax + 0.3) * 2) / 2;
+
 let curIdx = N - 1;
+let viewStart = 0;
 let trail = 20;
 let playSpeed = 4;
 let playing = false;
 let playTimer = null;
+let showYcc = false;
 
 function fmtDateJP(iso){
   const [y,m,d] = iso.split('-');
@@ -109,6 +155,11 @@ function fmtDateJP(iso){
 function curveVals(row){
   return row.slice(1, 1+NUM_MATURITIES);
 }
+
+const startDateInput = document.getElementById('startDate');
+startDateInput.min = dates[0];
+startDateInput.max = dates[N-1];
+startDateInput.value = dates[0];
 
 const ctxCurve = document.getElementById('curveChart').getContext('2d');
 const ctxPrice = document.getElementById('priceChart').getContext('2d');
@@ -144,10 +195,34 @@ const zeroLinePlugin = {
   }
 };
 
+// Shades the full width of the chart between the BOJ's YCC target band for the
+// currently-selected date, when the checkbox is enabled and that date falls
+// within a YCC period.
+const yccBandPlugin = {
+  id: 'yccBand',
+  beforeDatasetsDraw(chart){
+    if(!showYcc) return;
+    const period = yccForDate(RAW[curIdx][0]);
+    if(!period) return;
+    const yScale = chart.scales.y;
+    const ctx = chart.ctx;
+    const left = chart.chartArea.left, right = chart.chartArea.right;
+    const yTop = yScale.getPixelForValue(period.upper);
+    const yBot = yScale.getPixelForValue(period.lower);
+    ctx.save();
+    ctx.fillStyle = 'rgba(242,165,65,0.16)';
+    ctx.fillRect(left, yTop, right-left, yBot-yTop);
+    ctx.strokeStyle = 'rgba(242,165,65,0.55)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(left, yTop, right-left, yBot-yTop);
+    ctx.restore();
+  }
+};
+
 const curveChart = new Chart(ctxCurve, {
   type:'line',
   data:{ labels: MATURITY_LABELS, datasets: [] },
-  plugins:[zeroLinePlugin],
+  plugins:[zeroLinePlugin, yccBandPlugin],
   options:{
     responsive:true, maintainAspectRatio:false,
     animation:false,
@@ -159,33 +234,37 @@ const curveChart = new Chart(ctxCurve, {
         min: Y_MIN, max: Y_MAX,
         title:{display:true, text:'利回り (%)', color:'#9aa2af'},
         grid:{color:(ctx)=> ctx.tick && ctx.tick.value===0 ? '#7a8290' : '#262b35'},
-        ticks:{color:'#c7ccd4', stepSize:0.5}
+        ticks:{color:'#c7ccd4'}
       }
     }
   }
 });
 
-const priceChart = new Chart(ctxPrice, {
-  type:'line',
-  data:{
-    labels: dates,
+function buildPriceDataForView(){
+  return {
+    labels: dates.slice(viewStart),
     datasets:[
       {
-        label:'日経平均株価', data: nikkei, borderColor:'#4ea1ff', backgroundColor:'transparent',
+        label:'日経平均株価', data: nikkei.slice(viewStart), borderColor:'#4ea1ff', backgroundColor:'transparent',
         borderWidth:1.4, pointRadius:0, tension:0, order:2
       },
       {
-        label:'選択日', data: dates.map((d,i)=> i===curIdx ? nikkei[i] : null),
+        label:'選択日', data: dates.slice(viewStart).map((d,i)=> (i+viewStart)===curIdx ? nikkei[i+viewStart] : null),
         borderColor:'#e63946', backgroundColor:'#e63946', pointRadius:5, pointHoverRadius:6,
         showLine:false, order:1
       }
     ]
-  },
+  };
+}
+
+const priceChart = new Chart(ctxPrice, {
+  type:'line',
+  data: buildPriceDataForView(),
   options:{
     responsive:true, maintainAspectRatio:false, animation:false,
     plugins:{
       legend:{display:false},
-      tooltip:{ callbacks:{ title:(items)=> fmtDateJP(dates[items[0].dataIndex]), label:(c)=> c.datasetIndex===0 ? `日経平均: ${c.parsed.y.toLocaleString()}` : null } }
+      tooltip:{ callbacks:{ title:(items)=> fmtDateJP(dates[items[0].dataIndex+viewStart]), label:(c)=> c.datasetIndex===0 ? `日経平均: ${c.parsed.y.toLocaleString()}` : null } }
     },
     scales:{
       x:{ ticks:{ color:'#c7ccd4', maxTicksLimit:8, autoSkip:true }, grid:{display:false} },
@@ -193,7 +272,7 @@ const priceChart = new Chart(ctxPrice, {
     },
     onClick:(evt)=>{
       const points = priceChart.getElementsAtEventForMode(evt, 'index', {intersect:false}, true);
-      if(points.length){ setIndex(points[0].index); }
+      if(points.length){ setIndex(points[0].index + viewStart); }
     }
   }
 });
@@ -204,8 +283,35 @@ window.addEventListener('mouseup', ()=> dragging = false);
 document.getElementById('priceChart').addEventListener('mousemove', (evt)=>{
   if(!dragging) return;
   const points = priceChart.getElementsAtEventForMode(evt, 'index', {intersect:false}, true);
-  if(points.length){ setIndex(points[0].index); }
+  if(points.length){ setIndex(points[0].index + viewStart); }
 });
+
+startDateInput.addEventListener('change', ()=>{
+  const val = startDateInput.value;
+  let idx = dates.findIndex(d => d >= val);
+  if(idx === -1) idx = N-1;
+  viewStart = idx;
+  if(curIdx < viewStart) setIndex(viewStart);
+  priceChart.data = buildPriceDataForView();
+  priceChart.update();
+});
+
+document.getElementById('yccCheckbox').addEventListener('change', (e)=>{
+  showYcc = e.target.checked;
+  curveChart.update();
+  updateYccTag();
+});
+
+function updateYccTag(){
+  const tag = document.getElementById('yccTag');
+  const period = showYcc ? yccForDate(RAW[curIdx][0]) : null;
+  if(period){
+    tag.style.display = 'inline-block';
+    tag.textContent = `YCC目標: ${period.lower >= 0 ? '+' : ''}${period.lower}% 〜 +${period.upper}%`;
+  } else {
+    tag.style.display = 'none';
+  }
+}
 
 function buildCurveDatasets(idx, trailN){
   const datasets = [];
@@ -232,16 +338,17 @@ function buildCurveDatasets(idx, trailN){
 }
 
 function setIndex(idx){
-  curIdx = Math.max(0, Math.min(N-1, idx));
+  curIdx = Math.max(viewStart, Math.min(N-1, idx));
   const row = RAW[curIdx];
   document.getElementById('dateLabel').textContent = fmtDateJP(row[0]);
   document.getElementById('nikkeiLabel').textContent = row[NUM_MATURITIES+1].toLocaleString() + ' 円';
-  document.getElementById('y10Label').textContent = row[10].toFixed(3) + ' %';
+  document.getElementById('y10Label').textContent = row[10] != null ? row[10].toFixed(3) + ' %' : '—';
 
   curveChart.data.datasets = buildCurveDatasets(curIdx, trail);
   curveChart.update();
+  updateYccTag();
 
-  priceChart.data.datasets[1].data = dates.map((d,i)=> i===curIdx ? nikkei[i] : null);
+  priceChart.data.datasets[1].data = dates.slice(viewStart).map((d,i)=> (i+viewStart)===curIdx ? nikkei[i+viewStart] : null);
   priceChart.update('none');
 }
 
@@ -257,7 +364,7 @@ document.getElementById('speedSlider').addEventListener('input', (e)=>{
 
 document.getElementById('resetBtn').addEventListener('click', ()=>{
   stopPlay();
-  setIndex(0);
+  setIndex(viewStart);
 });
 
 function stopPlay(){
@@ -270,7 +377,7 @@ document.getElementById('playBtn').addEventListener('click', ()=>{
   if(playing){ stopPlay(); return; }
   playing = true;
   document.getElementById('playBtn').textContent = '⏸ 停止';
-  if(curIdx >= N-1) setIndex(0);
+  if(curIdx >= N-1) setIndex(viewStart);
   playTimer = setInterval(()=>{
     if(curIdx >= N-1){ stopPlay(); return; }
     setIndex(curIdx + playSpeed);
