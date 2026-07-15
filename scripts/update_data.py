@@ -27,7 +27,7 @@ MOF_HISTORICAL_CSV = "https://www.mof.go.jp/english/policy/jgbs/reference/intere
 UA = "Mozilla/5.0 (compatible; jgb-nikkei-yield-curve-updater/1.0)"
 
 MATURITY_COLS = ["1Y","2Y","3Y","4Y","5Y","6Y","7Y","8Y","9Y","10Y","15Y","20Y","25Y","30Y","40Y"]
-FLOOR_DATE = "1985-01-01"
+FLOOR_DATE = "1974-09-24"
 
 
 def http_get(url, headers=None):
