@@ -159,7 +159,13 @@ function curveVals(row){
 const startDateInput = document.getElementById('startDate');
 startDateInput.min = dates[0];
 startDateInput.max = dates[N-1];
-startDateInput.value = dates[0];
+// Default the visible window to 1985 (when the JGB curve has its full set of core
+// maturities) even though the full dataset goes back further; the date picker's
+// min still allows scrolling back to the earliest available data.
+const DEFAULT_VIEW_START = '1985-01-01';
+viewStart = dates.findIndex(d => d >= DEFAULT_VIEW_START);
+if(viewStart === -1) viewStart = 0;
+startDateInput.value = dates[viewStart];
 
 const ctxCurve = document.getElementById('curveChart').getContext('2d');
 const ctxPrice = document.getElementById('priceChart').getContext('2d');
