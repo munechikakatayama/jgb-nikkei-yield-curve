@@ -2,8 +2,8 @@
 """
 Fetches the latest JGB yield curve data (Ministry of Finance Japan) and
 Nikkei 225 daily close data (Yahoo Finance), merges any new trading days
-into data/jgb_nikkei_data.json, and regenerates full.html / simple.html
-from the templates in templates/.
+into data/jgb_nikkei_data.json, and regenerates index.html (== full.html)
+from templates/template_full.html.
 
 Designed to run daily via .github/workflows/update.yml on GitHub Actions,
 which has normal outbound internet access (no special workarounds needed).
@@ -20,15 +20,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DATA_PATH = ROOT / "data" / "jgb_nikkei_data.json"
 TEMPLATE_FULL = ROOT / "templates" / "template_full.html"
-TEMPLATE_SIMPLE = ROOT / "templates" / "template_simple.html"
 OUT_FULL = ROOT / "full.html"
-OUT_SIMPLE = ROOT / "simple.html"
+OUT_INDEX = ROOT / "index.html"
 
 MOF_HISTORICAL_CSV = "https://www.mof.go.jp/english/policy/jgbs/reference/interest_rate/historical/jgbcme_all.csv"
 UA = "Mozilla/5.0 (compatible; jgb-nikkei-yield-curve-updater/1.0)"
 
 MATURITY_COLS = ["1Y","2Y","3Y","4Y","5Y","6Y","7Y","8Y","9Y","10Y","15Y","20Y","25Y","30Y","40Y"]
-SIMPLE_IDX = [0, 1, 2, 5, 10, 12, 14, 16]  # date,1Y,2Y,5Y,10Y,20Y,30Y,nikkei out of the 17-col full row
+FLOOR_DATE = "1985-01-01"
 
 
 def http_get(url, headers=None):
@@ -38,7 +37,7 @@ def http_get(url, headers=None):
 
 
 def fetch_jgb():
-    """Returns {iso_date: [15 floats or None for 40Y]} for all available dates."""
+    """Returns {iso_date: [15 floats, None for any maturity not yet issued]}."""
     text = http_get(MOF_HISTORICAL_CSV)
     reader = csv.reader(io.StringIO(text))
     next(reader)  # title row
@@ -49,13 +48,10 @@ def fetch_jgb():
             continue
         y, m, d = row[0].split("/")
         iso = f"{int(y):04d}-{int(m):02d}-{int(d):02d}"
-        vals = row[1:16]
-        core = vals[:14]
-        if any(v.strip() in ("", "-") for v in core):
+        if iso < FLOOR_DATE:
             continue
-        parsed = [float(v) for v in core]
-        v40 = vals[14].strip()
-        parsed.append(float(v40) if v40 not in ("", "-") else None)
+        vals = row[1:16]
+        parsed = [float(v) if v.strip() not in ("", "-") else None for v in vals]
         out[iso] = parsed
     return out
 
@@ -91,7 +87,7 @@ def load_existing():
 def main():
     existing = load_existing()
     existing_by_date = {row[0]: row for row in existing}
-    last_date = existing[-1][0] if existing else "2007-01-01"
+    last_date = existing[-1][0] if existing else FLOOR_DATE
     print(f"Existing rows: {len(existing)}, last date: {last_date}")
 
     last_dt = date.fromisoformat(last_date)
@@ -100,7 +96,7 @@ def main():
 
     print("Fetching JGB historical CSV...")
     jgb = fetch_jgb()
-    print(f"  {len(jgb)} complete JGB rows total")
+    print(f"  {len(jgb)} JGB rows total (>= {FLOOR_DATE})")
 
     print("Fetching Nikkei 225 from Yahoo Finance...")
     nikkei = fetch_nikkei(period1, period2)
@@ -120,19 +116,13 @@ def main():
     DATA_PATH.write_text(json.dumps(merged, separators=(",", ":")), encoding="utf-8")
     print(f"Wrote {len(merged)} total rows to {DATA_PATH}")
 
-    simple = [[row[i] for i in SIMPLE_IDX] for row in merged]
-
     today_iso = date.today().isoformat()
-
     full_tpl = TEMPLATE_FULL.read_text(encoding="utf-8")
     full_out = full_tpl.replace("__DATA__", json.dumps(merged, separators=(",", ":"))).replace("__UPDATED__", today_iso)
     OUT_FULL.write_text(full_out, encoding="utf-8")
+    OUT_INDEX.write_text(full_out, encoding="utf-8")
 
-    simple_tpl = TEMPLATE_SIMPLE.read_text(encoding="utf-8")
-    simple_out = simple_tpl.replace("__DATA__", json.dumps(simple, separators=(",", ":")))
-    OUT_SIMPLE.write_text(simple_out, encoding="utf-8")
-
-    print(f"Regenerated {OUT_FULL.name} and {OUT_SIMPLE.name}")
+    print(f"Regenerated {OUT_FULL.name} and {OUT_INDEX.name}")
     print(f"Latest date now: {merged[-1][0]}")
     return 0
 
