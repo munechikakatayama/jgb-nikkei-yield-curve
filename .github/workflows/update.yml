@@ -31,7 +31,7 @@ jobs:
           if git diff --quiet; then
             echo "No changes to commit."
           else
-            git add data/jgb_nikkei_data.json full.html simple.html
+            git add data/jgb_nikkei_data.json full.html index.html
             git commit -m "Daily data update: $(date -u +%Y-%m-%d)"
             git push
           fi
