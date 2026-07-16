@@ -24,6 +24,11 @@ OUT_FULL = ROOT / "full.html"
 OUT_INDEX = ROOT / "index.html"
 
 MOF_HISTORICAL_CSV = "https://www.mof.go.jp/english/policy/jgbs/reference/interest_rate/historical/jgbcme_all.csv"
+# The full historical archive above lags a few weeks behind (it appears to be
+# appended in batches, not daily). MOF also publishes a same-day "current
+# month" CSV that's updated every trading day; fetch both and let the
+# current-month values win on overlap so we always pick up the latest days.
+MOF_CURRENT_CSV = "https://www.mof.go.jp/english/policy/jgbs/reference/interest_rate/jgbcme.csv"
 UA = "Mozilla/5.0 (compatible; jgb-nikkei-yield-curve-updater/1.0)"
 
 MATURITY_COLS = ["1Y","2Y","3Y","4Y","5Y","6Y","7Y","8Y","9Y","10Y","15Y","20Y","25Y","30Y","40Y"]
@@ -36,24 +41,49 @@ def http_get(url, headers=None):
         return resp.read().decode("utf-8", errors="replace")
 
 
-def fetch_jgb():
-    """Returns {iso_date: [15 floats, None for any maturity not yet issued]}."""
-    text = http_get(MOF_HISTORICAL_CSV)
+def _parse_jgb_csv(text):
+    """Parses a MOF JGB CSV (either the full archive or the current-month
+    file share the same 'Date,1Y,2Y,...,40Y' layout). Skips any trailing
+    blank/note rows that aren't real data rows instead of crashing on them."""
     reader = csv.reader(io.StringIO(text))
-    next(reader)  # title row
-    next(reader)  # header row
+    next(reader, None)  # title row
+    next(reader, None)  # header row
     out = {}
     for row in reader:
         if not row or not row[0]:
             continue
-        y, m, d = row[0].split("/")
-        iso = f"{int(y):04d}-{int(m):02d}-{int(d):02d}"
+        parts = row[0].split("/")
+        if len(parts) != 3:
+            continue  # trailing note/footer row, not a data row
+        try:
+            y, m, d = parts
+            iso = f"{int(y):04d}-{int(m):02d}-{int(d):02d}"
+        except ValueError:
+            continue
         if iso < FLOOR_DATE:
             continue
         vals = row[1:16]
-        parsed = [float(v) if v.strip() not in ("", "-") else None for v in vals]
+        try:
+            parsed = [float(v) if v.strip() not in ("", "-") else None for v in vals]
+        except ValueError:
+            continue
         out[iso] = parsed
     return out
+
+
+def fetch_jgb():
+    """Returns {iso_date: [15 floats, None for any maturity not yet issued]},
+    combining the full historical archive with the current-month CSV so the
+    most recent trading days (which the archive hasn't caught up on yet) are
+    still included."""
+    archive = _parse_jgb_csv(http_get(MOF_HISTORICAL_CSV))
+    try:
+        current = _parse_jgb_csv(http_get(MOF_CURRENT_CSV))
+    except Exception as e:
+        print(f"  Warning: failed to fetch current-month CSV ({e}); using archive only")
+        current = {}
+    archive.update(current)
+    return archive
 
 
 def fetch_nikkei(period1_epoch, period2_epoch):
